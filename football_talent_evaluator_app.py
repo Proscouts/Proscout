@@ -69,7 +69,7 @@ def prepare_data(raw_df):
             df[col] = np.random.randint(0, 5, size=len(df))
 
     df['Market_Value_EUR'] = df['Player Name'].map(reference_values)
-    df['Market_Value_SAR'] = df['Market_Value_EUR'] * 3.75
+    df['Market_Value_SAR'] = df['Market_Value_EUR'] * 4.27
     df['Asking_Price_SAR'] = df['Market_Value_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
     df['Verification'] = [validate_market_value(p, v) for p, v in zip(df['Player Name'], df['Market_Value_EUR'])]
     df['Age'] = np.random.randint(22, 30, size=len(df))
