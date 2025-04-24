@@ -33,9 +33,48 @@ reference_values = {
     "Ahmed Ayman": 150000, "Mohanad Mostafa Lasheen": 750000, "Karim El Deeb": 450000
 }
 
-def validate_market_value(player_name, input_value):
-    ref = reference_values.get(player_name)
-    return "🟡 Unknown" if ref is None else ("🔴 Off by >€2M" if abs(ref - input_value) > 2_000_000 else "🟢 Verified")
+def validate_market_value(player_row):
+    ref = reference_values.get(player_row['Player Name'])
+    asking = player_row['Player Asking Price (EUR)']
+
+    if ref is not None and abs(ref - asking) <= 2_000_000:
+        return "Verified"  # Reference-based match
+
+    # Otherwise, fall back to OpenAI stat plausibility check
+    prompt = f"""Evaluate this player's stats and market value using Transfermarkt or FBref.
+Respond only with: Verified, Partially Verified, or Unknown.
+
+Player:
+Name: {player_row['Player Name']}
+Team: {player_row['Team Name']}
+Age: {player_row['Age']}
+Goals: {player_row['Goals']}
+Assists: {player_row['Assists']}
+xG: {player_row['xG']}
+Interceptions: {player_row['Interceptions']}
+Minutes: {player_row['Minutes']}
+Passing Accuracy: {player_row['Passing Accuracy']}%
+Asking Price: €{player_row['Player Asking Price (EUR)']}
+"""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4-1106-preview",
+            messages=[
+                {"role": "system", "content": "You are a professional football scout. Only reply with Verified, Partially Verified, or Unknown."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        result = response.choices[0].message.content.strip().lower()
+
+        if "verified" in result and "partially" not in result:
+            return "Verified"
+        elif "partially" in result:
+            return "Partially Verified"
+        else:
+            return "Unknown"
+    except:
+        return "Unknown"
+
 
 # ==== Load Data ====
 @st.cache_data
