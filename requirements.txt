@@ -1,7 +1,8 @@
 streamlit
 pandas
 numpy
-altair
-xgboost
-openai
 requests
+scikit-learn
+xgboost
+altair
+openai
