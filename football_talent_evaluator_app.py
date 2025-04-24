@@ -6,10 +6,10 @@ import altair as alt
 import requests
 from requests.auth import HTTPBasicAuth
 from xgboost import XGBRegressor
-from openai import OpenAI
+import openai
 
 st.set_page_config(page_title="Football Talent Evaluator", layout="wide")
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # ==== UI CLEANUP ====
 st.markdown("""
@@ -35,7 +35,7 @@ reference_values = {
 
 def validate_market_value(player_row):
     ref = reference_values.get(player_row['Player Name'])
-    asking = player_row['Player Asking Price (EUR)']
+    asking = player_row['Asking_Price_EUR']  # Make sure the column name is correct
 
     if ref is not None and abs(ref - asking) <= 2_000_000:
         return "Verified"  # Reference-based match
@@ -54,10 +54,10 @@ xG: {player_row['xG']}
 Interceptions: {player_row['Interceptions']}
 Minutes: {player_row['Minutes']}
 Passing Accuracy: {player_row['Passing Accuracy']}%
-Asking Price: €{player_row['Player Asking Price (EUR)']}
+Asking Price: €{player_row['Asking_Price_EUR']}
 """
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4-1106-preview",
             messages=[
                 {"role": "system", "content": "You are a professional football scout. Only reply with Verified, Partially Verified, or Unknown."},
@@ -72,8 +72,8 @@ Asking Price: €{player_row['Player Asking Price (EUR)']}
             return "Partially Verified"
         else:
             return "Unknown"
-    except:
-        return "Unknown"
+    except Exception as e:
+        return "Unknown"  # In case of API failure
 
 
 # ==== Load Data ====
@@ -83,12 +83,14 @@ def load_api_data():
     r = requests.get(url, auth=HTTPBasicAuth("ammarjamshed123@gmail.com", "Am9D5nwK"))
     return pd.json_normalize(r.json()) if r.status_code == 200 else pd.DataFrame()
 
+
 # ==== Model Cache ====
 @st.cache_resource
 def train_model(X, y):
     model = XGBRegressor(objective="reg:squarederror")
     model.fit(X, y)
     return model
+
 
 # ==== Prepare Data ====
 @st.cache_data
@@ -107,10 +109,10 @@ def prepare_data(raw_df):
         if col not in df.columns:
             df[col] = np.random.randint(0, 5, size=len(df))
 
-    df['Asking_Price_EUR'] = df['Player Name'].map(reference_values)
+    df['Asking_Price_EUR'] = df['Player Name'].map(reference_values)  # Ensure column is present
     df['Asking_Price_SAR'] = df['Asking_Price_EUR'] * 3.75
     df['Asking_Price_SAR'] = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
-    df['Verification'] = df['Verification'] = [validate_market_value(row) for _, row in df.iterrows()]
+    df['Verification'] = [validate_market_value(row) for _, row in df.iterrows()]  # Update here
     df['Age'] = np.random.randint(22, 30, size=len(df))
     df['Image'] = df['Player Name'].apply(lambda n: f"https://robohash.org/{n.replace(' ', '')}.png?set=set2")
     df['Nationality'] = "Egyptian"
@@ -131,9 +133,9 @@ def prepare_data(raw_df):
 
     return df
 
+
 # ==== Upload Button ====
 st.sidebar.markdown("### 📁 Upload Player Data")
-st.sidebar.link_button("🔁 Go to Upload Portal", url="https://testmodelcheck.streamlit.app/")
 st.sidebar.markdown("💡Loading Data from Academies and Clubs")
 
 df = prepare_data(load_api_data())
@@ -220,11 +222,11 @@ with col2:
                    ("🟡", "Neutral") if "neutral" in text.lower() else ("⚪", "Unclear"))
 
         try:
-            sentiment_response = client.chat.completions.create(model="gpt-4-1106-preview", messages=sentiment_prompt)
+            sentiment_response = openai.ChatCompletion.create(model="gpt-4-1106-preview", messages=sentiment_prompt)
             sentiment_reply = sentiment_response.choices[0].message.content
             emoji, mood = get_icon(sentiment_reply)
 
-            summary_response = client.chat.completions.create(model="gpt-4-1106-preview", messages=summary_prompt)
+            summary_response = openai.ChatCompletion.create(model="gpt-4-1106-preview", messages=summary_prompt)
             summary_text = summary_response.choices[0].message.content
         except Exception as e:
             sentiment_reply = "Unable to classify sentiment."
