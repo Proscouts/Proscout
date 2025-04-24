@@ -121,7 +121,7 @@ def prepare_data(df):
 
 # === Redirect to Upload App Instead of File Upload
 st.sidebar.markdown("### 📁 Upload Player Data")
-st.sidebar.link_button("🔁 Go to Upload Portal", url="https://uploadplayers.streamlit.app")
+st.sidebar.link_button("🔁 Go to Upload Portal", url="https://testmodelcheck.streamlit.app/")
 
 # === Fallback to API if no data is uploaded
 st.sidebar.markdown("💡 No upload used here. Loading live StatsBomb data...")
