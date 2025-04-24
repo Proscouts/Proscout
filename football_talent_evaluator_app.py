@@ -34,13 +34,17 @@ reference_values = {
 }
 
 def validate_market_value(player_row):
+    # Ensure the required column exists
+    if 'Player Asking Price (EUR)' not in player_row:
+        return "Unknown"  # Handle missing column gracefully
+
     ref = reference_values.get(player_row['Player Name'])
     asking = player_row['Player Asking Price (EUR)']
 
     if ref is not None and abs(ref - asking) <= 2_000_000:
-        return "Verified"  # Reference-based match
+        return "Verified"  # ✅ Reference-based match
 
-    # Otherwise, fall back to OpenAI stat plausibility check
+    # Fall back to OpenAI verification
     prompt = f"""Evaluate this player's stats and market value using Transfermarkt or FBref.
 Respond only with: Verified, Partially Verified, or Unknown.
 
@@ -76,6 +80,7 @@ Asking Price: €{player_row['Player Asking Price (EUR)']}
         return "Unknown"
 
 
+
 # ==== Load Data ====
 @st.cache_data
 def load_api_data():
@@ -92,44 +97,21 @@ def train_model(X, y):
 
 # ==== Prepare Data ====
 @st.cache_data
-def prepare_data(raw_df):
-    np.random.seed(42)
-    mapping = {
-        'player_name': 'Player Name', 'team_name': 'Club',
-        'player_match_goals': 'Goals', 'player_match_assists': 'Assists',
-        'player_match_dribbles': 'Dribbles', 'player_match_interceptions': 'Interceptions',
-        'player_match_np_xg': 'xG', 'player_match_passing_ratio': 'PassingAccuracy',
-        'player_match_minutes': 'Minutes'
-    }
+def prepare_data(df):
+    # Clean column names to avoid any unexpected errors
+    df.columns = df.columns.str.strip()
 
-    df = raw_df.rename(columns={k: v for k, v in mapping.items() if k in raw_df.columns})
-    for col in mapping.values():
+    # Check if required columns are present
+    required_columns = ['Player Name', 'Player Asking Price (EUR)', 'Team Name', 'Age', 'Goals', 'Assists', 'xG', 'Interceptions', 'Minutes', 'Passing Accuracy']
+    for col in required_columns:
         if col not in df.columns:
-            df[col] = np.random.randint(0, 5, size=len(df))
+            st.error(f"Missing required column: {col}")
+            return df  # Exit if missing any essential columns
 
-    df['Asking_Price_EUR'] = df['Player Name'].map(reference_values)
-    df['Asking_Price_SAR'] = df['Asking_Price_EUR'] * 3.75
-    df['Asking_Price_SAR'] = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
-    df['Verification'] = df['Verification'] = df.apply(validate_market_value, axis=1)
-    df['Age'] = np.random.randint(22, 30, size=len(df))
-    df['Image'] = df['Player Name'].apply(lambda n: f"https://robohash.org/{n.replace(' ', '')}.png?set=set2")
-    df['Nationality'] = "Egyptian"
-    df['Position'] = np.random.choice(['Forward', 'Midfielder', 'Defender'], size=len(df))
-    df['League'] = "Egyptian Premier League"
-    df['Transfer_Chance'] = np.random.uniform(0.6, 0.95, size=len(df))
-    df['Best_Fit_Club'] = np.random.choice(['Man United', 'Al Hilal', 'Barcelona', 'PSG'], size=len(df))
-
-    features = ['xG', 'Assists', 'Goals', 'Dribbles', 'Interceptions', 'PassingAccuracy', 'Asking_Price_SAR']
-    df = df.dropna(subset=features)
-    X = df[features]
-    y = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.15, size=len(df))
-
-    model = train_model(X, y)
-    df['Predicted_Year_1'] = model.predict(X)
-    df['Predicted_Year_2'] = df['Predicted_Year_1'] * 1.05
-    df['Predicted_Year_3'] = df['Predicted_Year_2'] * 1.05
-
+    # Proceed with the rest of the data preparation
+    df['Verification'] = df.apply(validate_market_value, axis=1)
     return df
+
 
 # ==== Upload Button ====
 st.sidebar.markdown("### 📁 Upload Player Data")
