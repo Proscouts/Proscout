@@ -68,9 +68,9 @@ def prepare_data(raw_df):
         if col not in df.columns:
             df[col] = np.random.randint(0, 5, size=len(df))
 
-    df['Market_Value_EUR'] = df['Player Name'].map(reference_values)
-    df['Market_Value_SAR'] = df['Market_Value_EUR'] * 3.75
-    df['Asking_Price_SAR'] = df['Market_Value_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
+    df['Asking_Price_EUR'] = df['Player Name'].map(reference_values)
+    df['Asking_Price_SAR'] = df['Asking_Price_EUR'] * 3.75
+    df['Asking_Price_SAR'] = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
     df['Verification'] = [validate_market_value(p, v) for p, v in zip(df['Player Name'], df['Market_Value_EUR'])]
     df['Age'] = np.random.randint(22, 30, size=len(df))
     df['Image'] = df['Player Name'].apply(lambda n: f"https://robohash.org/{n.replace(' ', '')}.png?set=set2")
@@ -83,7 +83,7 @@ def prepare_data(raw_df):
     features = ['xG', 'Assists', 'Goals', 'Dribbles', 'Interceptions', 'PassingAccuracy', 'Market_Value_SAR']
     df = df.dropna(subset=features)
     X = df[features]
-    y = df['Market_Value_SAR'] * np.random.uniform(1.05, 1.15, size=len(df))
+    y = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.15, size=len(df))
 
     model = train_model(X, y)
     df['Predicted_Year_1'] = model.predict(X)
@@ -108,7 +108,7 @@ min_dribbles = st.sidebar.slider("Min Dribbles", 0, 20, 5)
 
 filtered_df = df[
     (df['Age'].between(age_range[0], age_range[1])) &
-    (df['Market_Value_SAR'].between(budget_range[0]*1e6, budget_range[1]*1e6)) &
+    (df['Asking_Price_SAR'].between(budget_range[0]*1e6, budget_range[1]*1e6)) &
     (df['Goals'] >= min_goals) &
     (df['Dribbles'] >= min_dribbles)
 ]
@@ -127,7 +127,7 @@ with col1:
         <div class='card'>
             <h4>{row['Player Name']} ({row['Position']})</h4>
             <p><strong>Club:</strong> {row['Club']} | League: {row['League']}</p>
-            <p><strong>Market Value:</strong> €{row['Market_Value_EUR']:,.0f}</p>
+            <p><strong>Market Value:</strong> €{row['Asking_Price_EUR']:,.0f}</p>
             <p><strong>Transfer Chance:</strong> {row['Transfer_Chance']*100:.1f}%</p>
             <p><strong>Verification:</strong> {row['Verification']}</p>
         </div>
