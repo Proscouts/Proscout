@@ -8,10 +8,11 @@ from requests.auth import HTTPBasicAuth
 from xgboost import XGBRegressor
 from openai import OpenAI
 
+# Streamlit configuration
 st.set_page_config(page_title="Football Talent Evaluator", layout="wide")
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ==== UI CLEANUP ====
+# UI Cleanup (Hide elements)
 st.markdown("""
     <style>
     #MainMenu, header, footer,
@@ -24,7 +25,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ==== Reference Values ====
+# Reference Values for Market Price (EUR)
 reference_values = {
     "Karim Hafez": 400000, "Blati": 1300000, "Ramadan Sobhi": 2500000,
     "Mostafa Fathi": 1500000, "Emmanuel Apeh": 350000, "Ali Gabr": 500000,
@@ -63,10 +64,8 @@ Asking Price: €{player_row['Player Asking Price (EUR)']}
     try:
         response = client.chat.completions.create(
             model="gpt-4-1106-preview",
-            messages=[
-                {"role": "system", "content": "You are a professional football scout. Only reply with Verified, Partially Verified, or Unknown."},
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "system", "content": "You are a professional football scout. Only reply with Verified, Partially Verified, or Unknown."},
+                      {"role": "user", "content": prompt}]
         )
         result = response.choices[0].message.content.strip().lower()
 
@@ -79,33 +78,29 @@ Asking Price: €{player_row['Player Asking Price (EUR)']}
     except:
         return "Unknown"
 
-
-
-# ==== Load Data ====
+# Load Data from StatsBomb API
 @st.cache_data
 def load_api_data():
     url = "https://data.statsbombservices.com/api/v5/matches/3967919/player-stats"
     r = requests.get(url, auth=HTTPBasicAuth("ammarjamshed123@gmail.com", "Am9D5nwK"))
     return pd.json_normalize(r.json()) if r.status_code == 200 else pd.DataFrame()
 
-# ==== Model Cache ====
+# Train Model (cached)
 @st.cache_resource
 def train_model(X, y):
     model = XGBRegressor(objective="reg:squarederror")
     model.fit(X, y)
     return model
 
-# ==== Prepare Data ====
+# Prepare Data
 @st.cache_data
 def prepare_data(df):
     # Clean column names to avoid any unexpected errors
     df.columns = df.columns.str.strip()
 
     # Check if required columns are present
-    required_columns = [
-        'Player Name', 'Player Asking Price (EUR)', 'Team Name', 'Age', 'Goals', 'Assists', 'xG', 
-        'Interceptions', 'Minutes', 'Passing Accuracy'
-    ]
+    required_columns = ['Player Name', 'Player Asking Price (EUR)', 'Team Name', 'Age', 'Goals', 'Assists', 'xG', 
+                        'Interceptions', 'Minutes', 'Passing Accuracy']
     
     for col in required_columns:
         if col not in df.columns:
@@ -116,15 +111,16 @@ def prepare_data(df):
     df['Verification'] = df.apply(validate_market_value, axis=1)
     return df
 
+# ---- UI INTERFACE ----
 
-# ==== Upload Button ====
+# Sidebar Filters
 st.sidebar.markdown("### 📁 Upload Player Data")
 st.sidebar.link_button("🔁 Go to Upload Portal", url="https://testmodelcheck.streamlit.app/")
 st.sidebar.markdown("💡Loading Data from Academies and Clubs")
 
 df = prepare_data(load_api_data())
 
-# ==== Filters ====
+# Filters
 st.sidebar.header("🎮 Filters")
 age_range = st.sidebar.slider("Age", 18, 40, (20, 34))
 budget_range = st.sidebar.slider("Budget (SAR)", 0, 30, (5, 25))
@@ -133,16 +129,16 @@ min_dribbles = st.sidebar.slider("Min Dribbles", 0, 20, 5)
 
 filtered_df = df[
     (df['Age'].between(age_range[0], age_range[1])) &
-    (df['Asking_Price_SAR'].between(budget_range[0]*1e6, budget_range[1]*1e6)) &
+    (df['Asking_Price_SAR'].between(budget_range[0] * 1e6, budget_range[1] * 1e6)) &
     (df['Goals'] >= min_goals) &
     (df['Dribbles'] >= min_dribbles)
 ]
 
-
+# Store selected player in session state
 if 'selected_player' not in st.session_state and not filtered_df.empty:
     st.session_state['selected_player'] = filtered_df.iloc[0]['Player Name']
 
-# ==== Layout ====
+# ---- Layout ----
 col1, col2 = st.columns([2, 1])
 with col1:
     st.markdown(f"### ⚽ Recommended Players ({len(filtered_df)} Found)")
@@ -154,7 +150,7 @@ with col1:
             <h4>{row['Player Name']} ({row['Position']})</h4>
             <p><strong>Club:</strong> {row['Club']} | League: {row['League']}</p>
             <p><strong>Market Value:</strong> €{row['Asking_Price_EUR']:,.0f}</p>
-            <p><strong>Transfer Chance:</strong> {row['Transfer_Chance']*100:.1f}%</p>
+            <p><strong>Transfer Chance:</strong> {row['Transfer_Chance'] * 100:.1f}%</p>
             <p><strong>Verification:</strong> {row['Verification']}</p>
         </div>
         """, unsafe_allow_html=True)
