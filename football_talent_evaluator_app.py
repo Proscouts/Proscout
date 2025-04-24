@@ -8,11 +8,10 @@ from requests.auth import HTTPBasicAuth
 from xgboost import XGBRegressor
 from openai import OpenAI
 
-# Streamlit configuration
 st.set_page_config(page_title="Football Talent Evaluator", layout="wide")
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# UI Cleanup (Hide elements)
+# ==== UI CLEANUP ====
 st.markdown("""
     <style>
     #MainMenu, header, footer,
@@ -25,7 +24,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Reference Values for Market Price (EUR)
+# ==== Reference Values ====
 reference_values = {
     "Karim Hafez": 400000, "Blati": 1300000, "Ramadan Sobhi": 2500000,
     "Mostafa Fathi": 1500000, "Emmanuel Apeh": 350000, "Ali Gabr": 500000,
@@ -35,17 +34,13 @@ reference_values = {
 }
 
 def validate_market_value(player_row):
-    # Ensure the required column exists
-    if 'Player Asking Price (EUR)' not in player_row:
-        return "Unknown"  # Handle missing column gracefully
-
     ref = reference_values.get(player_row['Player Name'])
     asking = player_row['Player Asking Price (EUR)']
 
     if ref is not None and abs(ref - asking) <= 2_000_000:
-        return "Verified"  # ✅ Reference-based match
+        return "Verified"  # Reference-based match
 
-    # Fall back to OpenAI verification
+    # Otherwise, fall back to OpenAI stat plausibility check
     prompt = f"""Evaluate this player's stats and market value using Transfermarkt or FBref.
 Respond only with: Verified, Partially Verified, or Unknown.
 
@@ -64,8 +59,10 @@ Asking Price: €{player_row['Player Asking Price (EUR)']}
     try:
         response = client.chat.completions.create(
             model="gpt-4-1106-preview",
-            messages=[{"role": "system", "content": "You are a professional football scout. Only reply with Verified, Partially Verified, or Unknown."},
-                      {"role": "user", "content": prompt}]
+            messages=[
+                {"role": "system", "content": "You are a professional football scout. Only reply with Verified, Partially Verified, or Unknown."},
+                {"role": "user", "content": prompt}
+            ]
         )
         result = response.choices[0].message.content.strip().lower()
 
@@ -78,49 +75,70 @@ Asking Price: €{player_row['Player Asking Price (EUR)']}
     except:
         return "Unknown"
 
-# Load Data from StatsBomb API
+
+# ==== Load Data ====
 @st.cache_data
 def load_api_data():
     url = "https://data.statsbombservices.com/api/v5/matches/3967919/player-stats"
     r = requests.get(url, auth=HTTPBasicAuth("ammarjamshed123@gmail.com", "Am9D5nwK"))
     return pd.json_normalize(r.json()) if r.status_code == 200 else pd.DataFrame()
 
-# Train Model (cached)
+# ==== Model Cache ====
 @st.cache_resource
 def train_model(X, y):
     model = XGBRegressor(objective="reg:squarederror")
     model.fit(X, y)
     return model
 
-# Prepare Data
+# ==== Prepare Data ====
 @st.cache_data
-def prepare_data(df):
-    # Clean column names to avoid any unexpected errors
-    df.columns = df.columns.str.strip()
+def prepare_data(raw_df):
+    np.random.seed(42)
+    mapping = {
+        'player_name': 'Player Name', 'team_name': 'Club',
+        'player_match_goals': 'Goals', 'player_match_assists': 'Assists',
+        'player_match_dribbles': 'Dribbles', 'player_match_interceptions': 'Interceptions',
+        'player_match_np_xg': 'xG', 'player_match_passing_ratio': 'PassingAccuracy',
+        'player_match_minutes': 'Minutes'
+    }
 
-    # Check if required columns are present
-    required_columns = ['Player Name', 'Player Asking Price (EUR)', 'Team Name', 'Age', 'Goals', 'Assists', 'xG', 
-                        'Interceptions', 'Minutes', 'Passing Accuracy']
-    
-    for col in required_columns:
+    df = raw_df.rename(columns={k: v for k, v in mapping.items() if k in raw_df.columns})
+    for col in mapping.values():
         if col not in df.columns:
-            st.error(f"Missing required column: {col}")
-            return df  # Exit if missing any essential columns
+            df[col] = np.random.randint(0, 5, size=len(df))
 
-    # Proceed with the rest of the data preparation
-    df['Verification'] = df.apply(validate_market_value, axis=1)
+    df['Asking_Price_EUR'] = df['Player Name'].map(reference_values)
+    df['Asking_Price_SAR'] = df['Asking_Price_EUR'] * 3.75
+    df['Asking_Price_SAR'] = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
+    df['Verification'] = [validate_market_value(p, v) for p, v in zip(df['Player Name'], df['Asking_Price_SAR'])]
+    df['Age'] = np.random.randint(22, 30, size=len(df))
+    df['Image'] = df['Player Name'].apply(lambda n: f"https://robohash.org/{n.replace(' ', '')}.png?set=set2")
+    df['Nationality'] = "Egyptian"
+    df['Position'] = np.random.choice(['Forward', 'Midfielder', 'Defender'], size=len(df))
+    df['League'] = "Egyptian Premier League"
+    df['Transfer_Chance'] = np.random.uniform(0.6, 0.95, size=len(df))
+    df['Best_Fit_Club'] = np.random.choice(['Man United', 'Al Hilal', 'Barcelona', 'PSG'], size=len(df))
+
+    features = ['xG', 'Assists', 'Goals', 'Dribbles', 'Interceptions', 'PassingAccuracy', 'Asking_Price_SAR']
+    df = df.dropna(subset=features)
+    X = df[features]
+    y = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.15, size=len(df))
+
+    model = train_model(X, y)
+    df['Predicted_Year_1'] = model.predict(X)
+    df['Predicted_Year_2'] = df['Predicted_Year_1'] * 1.05
+    df['Predicted_Year_3'] = df['Predicted_Year_2'] * 1.05
+
     return df
 
-# ---- UI INTERFACE ----
-
-# Sidebar Filters
+# ==== Upload Button ====
 st.sidebar.markdown("### 📁 Upload Player Data")
 st.sidebar.link_button("🔁 Go to Upload Portal", url="https://testmodelcheck.streamlit.app/")
 st.sidebar.markdown("💡Loading Data from Academies and Clubs")
 
 df = prepare_data(load_api_data())
 
-# Filters
+# ==== Filters ====
 st.sidebar.header("🎮 Filters")
 age_range = st.sidebar.slider("Age", 18, 40, (20, 34))
 budget_range = st.sidebar.slider("Budget (SAR)", 0, 30, (5, 25))
@@ -129,16 +147,15 @@ min_dribbles = st.sidebar.slider("Min Dribbles", 0, 20, 5)
 
 filtered_df = df[
     (df['Age'].between(age_range[0], age_range[1])) &
-    (df['Asking_Price_SAR'].between(budget_range[0] * 1e6, budget_range[1] * 1e6)) &
+    (df['Asking_Price_SAR'].between(budget_range[0]*1e6, budget_range[1]*1e6)) &
     (df['Goals'] >= min_goals) &
     (df['Dribbles'] >= min_dribbles)
 ]
 
-# Store selected player in session state
 if 'selected_player' not in st.session_state and not filtered_df.empty:
     st.session_state['selected_player'] = filtered_df.iloc[0]['Player Name']
 
-# ---- Layout ----
+# ==== Layout ====
 col1, col2 = st.columns([2, 1])
 with col1:
     st.markdown(f"### ⚽ Recommended Players ({len(filtered_df)} Found)")
@@ -150,7 +167,7 @@ with col1:
             <h4>{row['Player Name']} ({row['Position']})</h4>
             <p><strong>Club:</strong> {row['Club']} | League: {row['League']}</p>
             <p><strong>Market Value:</strong> €{row['Asking_Price_EUR']:,.0f}</p>
-            <p><strong>Transfer Chance:</strong> {row['Transfer_Chance'] * 100:.1f}%</p>
+            <p><strong>Transfer Chance:</strong> {row['Transfer_Chance']*100:.1f}%</p>
             <p><strong>Verification:</strong> {row['Verification']}</p>
         </div>
         """, unsafe_allow_html=True)
