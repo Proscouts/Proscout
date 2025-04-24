@@ -102,7 +102,11 @@ def prepare_data(df):
     df.columns = df.columns.str.strip()
 
     # Check if required columns are present
-    required_columns = ['Player Name', 'Player Asking Price (EUR)', 'Team Name', 'Age', 'Goals', 'Assists', 'xG', 'Interceptions', 'Minutes', 'Passing Accuracy']
+    required_columns = [
+        'Player Name', 'Player Asking Price (EUR)', 'Team Name', 'Age', 'Goals', 'Assists', 'xG', 
+        'Interceptions', 'Minutes', 'Passing Accuracy'
+    ]
+    
     for col in required_columns:
         if col not in df.columns:
             st.error(f"Missing required column: {col}")
