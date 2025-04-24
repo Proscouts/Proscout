@@ -110,7 +110,7 @@ def prepare_data(raw_df):
     df['Asking_Price_EUR'] = df['Player Name'].map(reference_values)
     df['Asking_Price_SAR'] = df['Asking_Price_EUR'] * 3.75
     df['Asking_Price_SAR'] = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
-    df['Verification'] = [validate_market_value(p, v) for p, v in zip(df['Player Name'], df['Asking_Price_SAR'])]
+    df['Verification'] = df['Verification'] = df.apply(validate_market_value, axis=1)
     df['Age'] = np.random.randint(22, 30, size=len(df))
     df['Image'] = df['Player Name'].apply(lambda n: f"https://robohash.org/{n.replace(' ', '')}.png?set=set2")
     df['Nationality'] = "Egyptian"
