@@ -95,7 +95,7 @@ def prepare_data(raw_df):
 # ==== Upload Button ====
 st.sidebar.markdown("### 📁 Upload Player Data")
 st.sidebar.link_button("🔁 Go to Upload Portal", url="https://testmodelcheck.streamlit.app/")
-st.sidebar.markdown("💡 No upload used here. Loading Data from Academies and Clubs")
+st.sidebar.markdown("💡Loading Data from Academies and Clubs")
 
 df = prepare_data(load_api_data())
 
