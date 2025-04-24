@@ -6,10 +6,10 @@ import altair as alt
 import requests
 from requests.auth import HTTPBasicAuth
 from xgboost import XGBRegressor
-import openai
+from openai import OpenAI
 
 st.set_page_config(page_title="Football Talent Evaluator", layout="wide")
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # ==== UI CLEANUP ====
 st.markdown("""
@@ -33,48 +33,9 @@ reference_values = {
     "Ahmed Ayman": 150000, "Mohanad Mostafa Lasheen": 750000, "Karim El Deeb": 450000
 }
 
-def validate_market_value(player_row):
-    ref = reference_values.get(player_row['Player Name'])
-    asking = player_row['Asking_Price_EUR']  # Make sure the column name is correct
-
-    if ref is not None and abs(ref - asking) <= 2_000_000:
-        return "Verified"  # Reference-based match
-
-    # Otherwise, fall back to OpenAI stat plausibility check
-    prompt = f"""Evaluate this player's stats and market value using Transfermarkt or FBref.
-Respond only with: Verified, Partially Verified, or Unknown.
-
-Player:
-Name: {player_row['Player Name']}
-Team: {player_row['Team Name']}
-Age: {player_row['Age']}
-Goals: {player_row['Goals']}
-Assists: {player_row['Assists']}
-xG: {player_row['xG']}
-Interceptions: {player_row['Interceptions']}
-Minutes: {player_row['Minutes']}
-Passing Accuracy: {player_row['Passing Accuracy']}%
-Asking Price: €{player_row['Asking_Price_EUR']}
-"""
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4-1106-preview",
-            messages=[
-                {"role": "system", "content": "You are a professional football scout. Only reply with Verified, Partially Verified, or Unknown."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        result = response.choices[0].message.content.strip().lower()
-
-        if "verified" in result and "partially" not in result:
-            return "Verified"
-        elif "partially" in result:
-            return "Partially Verified"
-        else:
-            return "Unknown"
-    except Exception as e:
-        return "Unknown"  # In case of API failure
-
+def validate_market_value(player_name, input_value):
+    ref = reference_values.get(player_name)
+    return "🟡 Unknown" if ref is None else ("🔴 Off by <€2M" if abs(ref - input_value) > 2_000_000 else "🟢 Verified")
 
 # ==== Load Data ====
 @st.cache_data
@@ -83,14 +44,12 @@ def load_api_data():
     r = requests.get(url, auth=HTTPBasicAuth("ammarjamshed123@gmail.com", "Am9D5nwK"))
     return pd.json_normalize(r.json()) if r.status_code == 200 else pd.DataFrame()
 
-
 # ==== Model Cache ====
 @st.cache_resource
 def train_model(X, y):
     model = XGBRegressor(objective="reg:squarederror")
     model.fit(X, y)
     return model
-
 
 # ==== Prepare Data ====
 @st.cache_data
@@ -109,10 +68,10 @@ def prepare_data(raw_df):
         if col not in df.columns:
             df[col] = np.random.randint(0, 5, size=len(df))
 
-    df['Asking_Price_EUR'] = df['Player Name'].map(reference_values)  # Ensure column is present
-    df['Asking_Price_SAR'] = df['Asking_Price_EUR'] * 3.75
-    df['Asking_Price_SAR'] = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
-    df['Verification'] = [validate_market_value(row) for _, row in df.iterrows()]  # Update here
+    df['Market_Value_EUR'] = df['Player Name'].map(reference_values)
+    df['Market_Value_SAR'] = df['Market_Value_EUR'] * 3.75
+    df['Asking_Price_SAR'] = df['Market_Value_SAR'] * np.random.uniform(1.05, 1.2, size=len(df))
+    df['Verification'] = [validate_market_value(p, v) for p, v in zip(df['Player Name'], df['Market_Value_EUR'])]
     df['Age'] = np.random.randint(22, 30, size=len(df))
     df['Image'] = df['Player Name'].apply(lambda n: f"https://robohash.org/{n.replace(' ', '')}.png?set=set2")
     df['Nationality'] = "Egyptian"
@@ -121,10 +80,10 @@ def prepare_data(raw_df):
     df['Transfer_Chance'] = np.random.uniform(0.6, 0.95, size=len(df))
     df['Best_Fit_Club'] = np.random.choice(['Man United', 'Al Hilal', 'Barcelona', 'PSG'], size=len(df))
 
-    features = ['xG', 'Assists', 'Goals', 'Dribbles', 'Interceptions', 'PassingAccuracy', 'Asking_Price_SAR']
+    features = ['xG', 'Assists', 'Goals', 'Dribbles', 'Interceptions', 'PassingAccuracy', 'Market_Value_SAR']
     df = df.dropna(subset=features)
     X = df[features]
-    y = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.15, size=len(df))
+    y = df['Market_Value_SAR'] * np.random.uniform(1.05, 1.15, size=len(df))
 
     model = train_model(X, y)
     df['Predicted_Year_1'] = model.predict(X)
@@ -133,10 +92,10 @@ def prepare_data(raw_df):
 
     return df
 
-
 # ==== Upload Button ====
 st.sidebar.markdown("### 📁 Upload Player Data")
-st.sidebar.markdown("💡Loading Data from Academies and Clubs")
+st.sidebar.link_button("🔁 Go to Upload Portal", url="https://testmodelcheck.streamlit.app/")
+st.sidebar.markdown("💡 Loading Data From Clubs and Academies...")
 
 df = prepare_data(load_api_data())
 
@@ -149,7 +108,7 @@ min_dribbles = st.sidebar.slider("Min Dribbles", 0, 20, 5)
 
 filtered_df = df[
     (df['Age'].between(age_range[0], age_range[1])) &
-    (df['Asking_Price_SAR'].between(budget_range[0]*1e6, budget_range[1]*1e6)) &
+    (df['Market_Value_SAR'].between(budget_range[0]*1e6, budget_range[1]*1e6)) &
     (df['Goals'] >= min_goals) &
     (df['Dribbles'] >= min_dribbles)
 ]
@@ -168,7 +127,7 @@ with col1:
         <div class='card'>
             <h4>{row['Player Name']} ({row['Position']})</h4>
             <p><strong>Club:</strong> {row['Club']} | League: {row['League']}</p>
-            <p><strong>Market Value:</strong> €{row['Asking_Price_EUR']:,.0f}</p>
+            <p><strong>Market Value:</strong> €{row['Market_Value_EUR']:,.0f}</p>
             <p><strong>Transfer Chance:</strong> {row['Transfer_Chance']*100:.1f}%</p>
             <p><strong>Verification:</strong> {row['Verification']}</p>
         </div>
@@ -222,11 +181,11 @@ with col2:
                    ("🟡", "Neutral") if "neutral" in text.lower() else ("⚪", "Unclear"))
 
         try:
-            sentiment_response = openai.ChatCompletion.create(model="gpt-4-1106-preview", messages=sentiment_prompt)
+            sentiment_response = client.chat.completions.create(model="gpt-4-1106-preview", messages=sentiment_prompt)
             sentiment_reply = sentiment_response.choices[0].message.content
             emoji, mood = get_icon(sentiment_reply)
 
-            summary_response = openai.ChatCompletion.create(model="gpt-4-1106-preview", messages=summary_prompt)
+            summary_response = client.chat.completions.create(model="gpt-4-1106-preview", messages=summary_prompt)
             summary_text = summary_response.choices[0].message.content
         except Exception as e:
             sentiment_reply = "Unable to classify sentiment."
