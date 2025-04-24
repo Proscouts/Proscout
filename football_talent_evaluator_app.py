@@ -151,6 +151,8 @@ with col1:
     for _, row in filtered_df.iterrows():
         if st.button(f"{row['Player Name']} ({row['Position']})", key=row['Player Name']):
             st.session_state['selected_player'] = row['Player Name']
+            st.experimental_rerun()
+
         st.markdown(f"""
         <div class='card'>
             <h4>{row['Player Name']} ({row['Position']})</h4>
