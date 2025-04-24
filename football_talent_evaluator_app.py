@@ -80,7 +80,7 @@ def prepare_data(raw_df):
     df['Transfer_Chance'] = np.random.uniform(0.6, 0.95, size=len(df))
     df['Best_Fit_Club'] = np.random.choice(['Man United', 'Al Hilal', 'Barcelona', 'PSG'], size=len(df))
 
-    features = ['xG', 'Assists', 'Goals', 'Dribbles', 'Interceptions', 'PassingAccuracy', 'Market_Value_SAR']
+    features = ['xG', 'Assists', 'Goals', 'Dribbles', 'Interceptions', 'PassingAccuracy', 'Asking_Price_SAR']
     df = df.dropna(subset=features)
     X = df[features]
     y = df['Asking_Price_SAR'] * np.random.uniform(1.05, 1.15, size=len(df))
