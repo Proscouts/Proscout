@@ -138,6 +138,7 @@ filtered_df = df[
     (df['Dribbles'] >= min_dribbles)
 ]
 
+
 if 'selected_player' not in st.session_state and not filtered_df.empty:
     st.session_state['selected_player'] = filtered_df.iloc[0]['Player Name']
 
